@@ -1,52 +1,85 @@
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+// Importing Three.js from CDN
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.z = 50;
+
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
 // UI Controls
 const sizeSlider = document.getElementById("sizeSlider");
 const velocitySlider = document.getElementById("velocitySlider");
 
+// Particle System
 const particles = [];
-const particleCount = 100; // Adjust for density
+const particleCount = 200;
 
-function createExplosion(x, y) {
+function createExplosion() {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = new Float32Array(particleCount * 3);
+
     for (let i = 0; i < particleCount; i++) {
-        particles.push({
-            x, y,
-            vx: (Math.random() - 0.5) * velocitySlider.value, // Speed
-            vy: (Math.random() - 0.5) * velocitySlider.value,
-            size: parseInt(sizeSlider.value), // Size from slider
-            alpha: 1, // Opacity for fade-out
-            color: `hsl(${Math.random() * 360}, 100%, 50%)` // Random colors
-        });
+        positions[i * 3] = 0;
+        positions[i * 3 + 1] = 0;
+        positions[i * 3 + 2] = 0;
+
+        velocities[i * 3] = (Math.random() - 0.5) * velocitySlider.value;
+        velocities[i * 3 + 1] = (Math.random() - 0.5) * velocitySlider.value;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * velocitySlider.value;
     }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+
+    const material = new THREE.PointsMaterial({
+        color: 0xffa500, 
+        size: parseInt(sizeSlider.value),
+        transparent: true,
+        opacity: 1
+    });
+
+    const particleSystem = new THREE.Points(geometry, material);
+    scene.add(particleSystem);
+    particles.push({ system: particleSystem, age: 0 });
 }
 
 function animate() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    particles.forEach((p, i) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.alpha -= 0.02;
+    requestAnimationFrame(animate);
 
-        ctx.globalAlpha = p.alpha;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
+    particles.forEach((p, index) => {
+        const positions = p.system.geometry.attributes.position.array;
+        const velocities = p.system.geometry.attributes.velocity.array;
+        
+        for (let i = 0; i < particleCount; i++) {
+            positions[i * 3] += velocities[i * 3]; 
+            positions[i * 3 + 1] += velocities[i * 3 + 1] - 0.05; // Gravity
+            positions[i * 3 + 2] += velocities[i * 3 + 2];
 
-        if (p.alpha <= 0) particles.splice(i, 1);
+            velocities[i * 3 + 1] -= 0.02; // Simulate falling effect
+        }
+
+        p.system.geometry.attributes.position.needsUpdate = true;
+        p.age += 0.02;
+
+        if (p.age > 2) {
+            scene.remove(p.system);
+            particles.splice(index, 1);
+        }
     });
 
-    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
 }
 
-// Automated explosions every 1 second
-setInterval(() => {
-    const x = Math.random() * canvas.width;
-    const y = Math.random() * canvas.height;
-    createExplosion(x, y);
-}, 1000);
+// Automated explosions
+setInterval(createExplosion, 1000);
 
 animate();
+
+// Resize Handling
+window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+});
